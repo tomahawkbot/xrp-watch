@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1220">
+<title>XRP Watch | Market dashboard</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#141d2c;--line:#2d3c51;--ink:#eef5fa;--muted:#97aabe;--accent:#42d6c3;--blue:#78aaff;--red:#ff778c}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 8% 0%,#182b3c 0%,var(--bg) 43%);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:var(--ink)}
+main{max-width:1110px;margin:auto;padding:38px 22px 55px}header{display:flex;align-items:flex-start;justify-content:space-between;gap:22px;flex-wrap:wrap}.eyebrow{color:var(--accent);text-transform:uppercase;letter-spacing:.16em;font-size:11px;font-weight:800}h1{font-size:clamp(30px,5vw,50px);line-height:1.1;letter-spacing:-.04em;margin:7px 0}p{margin:0;color:var(--muted)}.badge{border:1px solid var(--line);border-radius:99px;padding:9px 14px;font-size:12px;color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin:32px 0}.card,.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px}.card{padding:19px}.label{color:var(--muted);font-size:12px}.value{font-size:clamp(19px,3vw,28px);font-weight:700;letter-spacing:-.025em;margin:8px 0 2px}.sub{font-size:12px;color:var(--muted)}.up{color:var(--accent)}.down{color:var(--red)}.panel{padding:22px}.panel-head{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}h2{font-size:18px;margin:0}.controls{display:flex;gap:7px;align-items:center;flex-wrap:wrap}button{font:inherit;background:#1e2a3a;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}button:hover,button:focus-visible{border-color:var(--accent)}button[aria-pressed=true]{background:#1a4948;color:#bffff4;border-color:#378f83}button:disabled{opacity:.55;cursor:wait}.legend{display:flex;gap:18px;color:var(--muted);font-size:12px;margin:15px 0 0}.legend i{display:inline-block;width:12px;height:3px;margin:0 6px 3px 0;background:var(--accent)}.legend i.sma{background:var(--blue)}#plot{width:100%;height:350px;display:block;margin:6px 0}#plot text{fill:var(--muted);font:11px system-ui,sans-serif}.status{min-height:23px;margin-top:10px;color:var(--muted);font-size:13px}.status.error{color:var(--red)}.foot{font-size:12px;line-height:1.65;margin:26px 2px;color:var(--muted)}a{color:#9ec5ff}.bottom{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}@media(max-width:740px){main{padding:24px 15px}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.panel{padding:15px}#plot{height:275px}}@media(max-width:390px){.grid{gap:8px}.card{padding:12px}.value{font-size:19px}}
+</style>
+</head>
+<body><main>
+<header><div><div class="eyebrow">Market dashboard / XRP-USD</div><h1>XRP Watch</h1><p>A clear view of price, trend and activity. No wallet connection needed.</p></div><div class="badge" id="updated">Loading market data</div></header>
+<section class="grid" aria-label="Market snapshot"><div class="card"><div class="label">Latest daily close</div><div class="value" id="price">--</div><div class="sub" id="price-date">UTC candle</div></div><div class="card"><div class="label">Previous candle change</div><div class="value" id="change">--</div><div class="sub">Close to close</div></div><div class="card"><div class="label">30-day high / low</div><div class="value" id="range">--</div><div class="sub">Daily candle extremes</div></div><div class="card"><div class="label">Latest daily volume</div><div class="value" id="volume">--</div><div class="sub">XRP traded on Coinbase Exchange</div></div></section>
+<section class="panel" aria-labelledby="chart-title"><div class="panel-head"><div><h2 id="chart-title">Daily closing price</h2><p id="chart-caption">XRP-USD · UTC days</p></div><div class="controls" role="group" aria-label="Chart range"><button type="button" data-days="7">7D</button><button type="button" data-days="30" aria-pressed="true">30D</button><button type="button" data-days="90">90D</button><button type="button" data-days="180">180D</button></div></div><div class="legend"><span><i></i>Close</span><span><i class="sma"></i>7-day average</span></div><svg id="plot" viewBox="0 0 900 350" role="img" aria-label="Daily XRP closing prices and seven-day moving average"></svg><div class="bottom"><div class="status" id="status" role="status" aria-live="polite"></div><div class="controls"><button type="button" id="refresh">Refresh</button><button type="button" id="csv" disabled>Download CSV</button></div></div></section>
+<p class="foot">Source: <a href="https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles" target="_blank" rel="noopener noreferrer">Coinbase Exchange public daily candles</a>. Quotes are XRP-USD on Coinbase, not an average across exchanges. UTC daily candles include the current, unfinished day; values can change. Historical data may be incomplete and updates may be delayed. This is a market viewer, not financial advice or a trading signal. No orders, keys, or holdings are stored.</p>
+</main><script>
+(() => {
+  'use strict';
+  const API = 'https://api.exchange.coinbase.com/products/XRP-USD/candles?granularity=86400';
+  const $ = id => document.getElementById(id);
+  let candles = [], selectedDays = 30;
+  const usd = n => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:4,maximumFractionDigits:4}).format(n);
+  const compact = n => new Intl.NumberFormat('en-US',{notation:'compact',maximumFractionDigits:1}).format(n);
+  const date = seconds => new Date(seconds * 1000).toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
+  function parseCandles(payload) {
+    if (!Array.isArray(payload)) throw new Error('Unexpected market response');
+    return payload.filter(row => Array.isArray(row) && row.length >= 6 && row.slice(0,6).every(Number.isFinite) && row[0] > 0 && row[1] >= 0 && row[2] >= row[1] && row[4] >= 0).map(([time,low,high,open,close,volume]) => ({time,low,high,open,close,volume})).sort((a,b) => a.time-b.time);
+  }
+  const svgEl = (tag, attrs) => {const node=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attrs))node.setAttribute(k,String(v));return node};
+  function draw(rows) {
+    const svg=$('plot'); svg.replaceChildren();
+    if(rows.length < 2)return;
+    const W=900,H=350,left=68,right=20,top=25,bottom=44, iw=W-left-right, ih=H-top-bottom;
+    const close=rows.map(r=>r.close), lo=Math.min(...close), hi=Math.max(...close), pad=Math.max((hi-lo)*.12,hi*.005), min=lo-pad,max=hi+pad;
+    const x=i=>left+i*iw/(rows.length-1), y=v=>top+(max-v)*ih/(max-min);
+    for(let i=0;i<5;i++){const yy=top+i*ih/4;svg.append(svgEl('line',{x1:left,x2:W-right,y1:yy,y2:yy,stroke:'#2d3c51'}));const t=svgEl('text',{x:left-12,y:yy+4,'text-anchor':'end'});t.textContent='$'+(max-i*(max-min)/4).toFixed(2);svg.append(t)}
+    for(const i of [...new Set([0,Math.floor((rows.length-1)/2),rows.length-1])]){const t=svgEl('text',{x:x(i),y:H-12,'text-anchor':i===0?'start':i===rows.length-1?'end':'middle'});t.textContent=date(rows[i].time);svg.append(t)}
+    const path=points=>points.map(([px,py],i)=>(i?'L':'M')+px.toFixed(2)+' '+py.toFixed(2)).join(' ');
+    svg.append(svgEl('path',{d:path(close.map((v,i)=>[x(i),y(v)])),fill:'none',stroke:'#42d6c3','stroke-width':2.7,'stroke-linejoin':'round'}));
+    const avgs=[];for(let i=6;i<rows.length;i++){let sum=0;for(let j=i-6;j<=i;j++)sum+=rows[j].close;avgs.push([x(i),y(sum/7)])}
+    if(avgs.length)svg.append(svgEl('path',{d:path(avgs),fill:'none',stroke:'#78aaff','stroke-width':2,'stroke-linejoin':'round'}));
+    const last=close.length-1;svg.append(svgEl('circle',{cx:x(last),cy:y(close[last]),r:5,fill:'#42d6c3',stroke:'#0b1220','stroke-width':2}));
+  }
+  function render(){
+    const rows=candles.slice(-selectedDays);if(!rows.length)return;
+    const last=candles.at(-1),previous=candles.at(-2),last30=candles.slice(-30);
+    $('price').textContent=usd(last.close);$('price-date').textContent=date(last.time)+' UTC candle';
+    if(previous){const delta=(last.close/previous.close-1)*100;const node=$('change');node.textContent=(delta>=0?'+':'')+delta.toFixed(2)+'%';node.className='value '+(delta>=0?'up':'down')}
+    $('range').textContent='$'+Math.max(...last30.map(r=>r.high)).toFixed(2)+' / $'+Math.min(...last30.map(r=>r.low)).toFixed(2);
+    $('volume').textContent=compact(last.volume)+' XRP';
+    $('chart-caption').textContent=`XRP-USD · last ${rows.length} UTC daily candles`;
+    for(const b of document.querySelectorAll('[data-days]'))b.setAttribute('aria-pressed',String(Number(b.dataset.days)===selectedDays));
+    $('csv').disabled=false;draw(rows);
+  }
+  async function load(){
+    const refresh=$('refresh');refresh.disabled=true;$('status').className='status';$('status').textContent='Fetching daily candles…';
+    try{const response=await fetch(API,{headers:{Accept:'application/json'},cache:'no-store'});if(!response.ok)throw new Error('Market service returned HTTP '+response.status);const next=parseCandles(await response.json());if(next.length<2)throw new Error('Not enough daily candles to chart');candles=next;render();$('updated').textContent='Fetched '+new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});$('status').textContent=`Showing ${candles.length} available candles · refresh for a new snapshot`;}
+    catch(error){$('status').className='status error';$('status').textContent=`Could not fetch fresh XRP data: ${error.message}. ${candles.length?'Showing previous snapshot.':'Try Refresh later.'}`;}
+    finally{refresh.disabled=false}
+  }
+  document.querySelectorAll('[data-days]').forEach(b=>b.addEventListener('click',()=>{selectedDays=Number(b.dataset.days);render()}));
+  $('refresh').addEventListener('click',load);
+  $('csv').addEventListener('click',()=>{if(!candles.length)return;const lines=['date_utc,open_usd,high_usd,low_usd,close_usd,volume_xrp',...candles.map(r=>`${new Date(r.time*1000).toISOString().slice(0,10)},${r.open},${r.high},${r.low},${r.close},${r.volume}`)];const url=URL.createObjectURL(new Blob([lines.join('\n')+'\n'],{type:'text/csv'}));const a=document.createElement('a');a.href=url;a.download='xrp-usd-coinbase-daily.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)});
+  load();
+})();
+</script></body></html>
